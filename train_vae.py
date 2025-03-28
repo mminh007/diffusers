@@ -1,5 +1,5 @@
 import torch
-from VAE.model import ResNetVAE 
+from VAE.model import ResNetVAEV2
 from VAE.dataset import build_dataloader
 from VAE.loss import VAE_loss
 from VAE.visualize import visualize_loss
@@ -13,11 +13,20 @@ import numpy as np
 def setup_parse():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--in-chans", default=3, type=int)
-    parser.add_argument("--latent-dim", default=128, type=int)
+    parser.add_argument("--in-chans", default=64, type=int)
+    parser.add_argument("--num-chans", default=3, type=int)
+    parser.add_argument("--out-chans", default=3, type=int)
+    parser.add_argument("--z-dim", default=4, type=int)
+    parser.add_argument("--embed-dim", default=4, type=int)
+    parser.add_argument("--blocks", default=2, type=int)
+    parser.add_argument("--channel-multipliers", nargs="+", type=int, default=[1,2,4,4])
 
     parser.add_argument("--epochs", default=10, type=int)
     parser.add_argument("--imgsz", default=32, type=int)
+
+    parser.add_argument("--scheduler", type=str, default="step", choices=["step", "cosine", "plateau"])
+    parser.add_argument("--step-size", type=int, default=5, help="Step size for StepLR")
+    parser.add_argument("--gamma", type=float, default=0.5, help="Decay factor for StepLR and ReduceLROnPlateau")
 
     parser.add_argument("--lr", default=1e-3, type=float)
     parser.add_argument("--optimizer", default="adamw", type=str)
@@ -35,7 +44,7 @@ def setup_parse():
     parser.add_argument("--save-dir", type=str, default="checkpoints")
     parser.add_argument("--early-stop-patience", type=int, default=5)
     parser.add_argument("--visualize", action="store_true")
-
+    parser.add_argument("--debug", action="store_true")
 
     args = parser.parse_args()
     return args
@@ -50,36 +59,44 @@ def main():
     timestap = datetime.now().strftime("%Y%m%d-%H%M%S")
     log_file = os.path.join(args.log_dir, f"train_log_{timestap}.txt")
     
-
     with open(log_file, "w") as f:
         f.write(f"Training started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Model: VAE with latent_dim={args.latent_dim}\n")
         f.write(f"Batch size: {args.batch}, Image size: {args.imgsz}x{args.imgsz}\n")
         f.write(f"Total number of epochs: {args.epochs}\n")
 
     trainloader, testloader = build_dataloader(args)
 
-    model = ResNetVAE(in_chans=args.in_chans,
-                      out_chans=args.in_chans,
-                      latent_dim=args.latent_dim)
+    model = ResNetVAEV2(in_chans=args.in_chans,
+                        num_chans=args.num_chans,
+                        out_chans=args.out_chans,
+                        z_dim=args.z_dim,
+                        embed_dim=args.embed_dim,
+                        blocks=args.blocks,
+                        channel_multipliers=args.channel_multipliers)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model.to(device)
 
-    if args.optimizer is not None:
-        if args.optimizer.lower() == "adam":
-            optimizer = torch.optim.Adam(model.parameters(), lr = args.lr,
-                                         betas=[args.beta1, args.beta2], weight_decay=args.weight_decay)
-        
-        elif args.optimizer.lower() == "adamw":
-            optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
-                                          betas=[args.beta1, args.beta2], weight_decay=args.weight_decay)        
-    else:
+    if args.optimizer.lower() == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+                                    betas=[args.beta1, args.beta2], weight_decay=args.weight_decay)
+    elif args.optimizer.lower() == "adamw":
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
-                                          betas=[args.beta1, args.beta2], weight_decay=args.weight_decay)
+                                    betas=[args.beta1, args.beta2], weight_decay=args.weight_decay)
+    else:
+        raise ValueError(f"Unsupported optimizer: {args.optimizer}. Choose from ['adam', 'adamw'].")
+
         
-    
+    if args.scheduler == "step":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+    elif args.scheduler == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    elif args.scheduler == "plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=args.gamma, patience=3)
+    else:
+        scheduler = None
+
     # if args.dtype.lower() == "bf16":
     #     dtype = torch.bfloat16
     # elif args.dtype.lower() == "fp16":
@@ -101,8 +118,11 @@ def main():
         val_recon_loss_history = []
         val_kl_loss_history = []
 
-    torch.autograd.set_detect_anomaly(True)
+    if args.debug:
+        torch.autograd.set_detect_anomaly(True)
+        
     best_loss = np.inf
+    patience_counter = 0
 
     for epoch in range(args.epochs):
         model.train()
@@ -136,7 +156,7 @@ def main():
             train_recon_loss_history.append(avg_train_recons_loss)
             train_kl_loss_history.append(avg_train_kl_loss)
 
-        print(f"Epoch {epoch+1}/{args.epochs}: Train_Loss: {avg_train_loss} "
+        print(f"Epoch {epoch+1}/{args.epochs}:\n Train_Loss: {avg_train_loss}, "
                 f"Reconstruction Loss: {avg_train_recons_loss}, KL Divergence: {avg_train_kl_loss}\n")
         
         with open(log_file, "a") as f:
@@ -171,6 +191,12 @@ def main():
 
         with open(log_file, "a") as f:
             f.write(f"  Val_loss: {avg_val:.6f}, Val_Reconstruction_loss: {avg_recons:.6f}, Val_KL_loss: {avg_kl:.6f}\n")
+        
+        if scheduler is not None:
+            if args.scheduler == "plateau":
+                scheduler.step(avg_val)
+            else:
+                scheduler.step()
 
         os.makedirs(args.save_dir, exist_ok=True)
         ckpt_dir = os.path.join(args.save_dir, f"checkpoint_cifar10_{args.imgsz}.pth")
