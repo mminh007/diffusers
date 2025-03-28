@@ -1,8 +1,8 @@
 import torch
-from VAE.model import ResNetVAEV2
-from VAE.dataset import build_dataloader
-from VAE.loss import VAE_loss
-from VAE.visualize import visualize_loss
+from src.model import ResNetVAEV2
+from src.dataset import build_dataloader
+from src.loss import VAE_loss
+from src.visualize import visualize_loss
 import argparse
 from tqdm import tqdm
 import os
