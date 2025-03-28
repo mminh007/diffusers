@@ -106,7 +106,7 @@ $$\geq \int q_\phi(z|x) log \frac{p_\theta(x,z)}{q_\phi(z|x)} dz$$
 
 $$\geq E_{q_\phi(z|x)} [log \frac{p_\theta(x,z)}{q_\phi(z|x)}]$$
 
-$$ \rightarrow log p_\theta(x) - \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = D_{KL} (q_\phi(z|x) || p_\theta(z|x)) \quad (**)$$
+$$\rightarrow log p_\theta(x) - \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = D_{KL} (q_\phi(z|x) || p_\theta(z|x)) \quad (**)$$
 
 $$= \mathbf{ELBO} (x; \theta, \phi)$$
 
@@ -136,9 +136,9 @@ The objective of the loss function in a Variational Autoencoder (VAE) is to:
 
 From $(**)$, the **Evidence Lower Bound (ELBO)** is given by:
 
-$$ \mathcal{L}_{(\theta, \phi)}(x) := \mathbf{E}_{q_{\phi}(z|x)}[log \frac{p_{\theta}(x,z)}{q_{\phi}(z|x)}] $$  
+$$\mathcal{L}_{(\theta, \phi)}(x) := \mathbf{E}_{q_{\phi}(z|x)}[log \frac{p_{\theta}(x,z)}{q_{\phi}(z|x)}] $$  
 
-$$ = log p_\theta(x) - D_{KL} (q_\phi(z|x) || p_\theta(z|x)) $$
+$$= log p_\theta(x) - D_{KL} (q_\phi(z|x) || p_\theta(z|x)) $$
 
 To **maximize** $\mathcal{L}_{(\theta, \phi)}(x)$, we:
 
@@ -148,15 +148,15 @@ To **maximize** $\mathcal{L}_{(\theta, \phi)}(x)$, we:
 
 Thus, the **VAE loss function** can be rewritten as:
 
-$$ \mathcal{L}_{(\theta, \phi)}(x) = \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] $$
+$$\mathcal{L}_{(\theta, \phi)}(x) = \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] $$
 
-$$ = \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x|z) p_\theta(z)}{q_\phi(z|x)}] $$
+$$= \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x|z) p_\theta(z)}{q_\phi(z|x)}] $$
 
-$$ = \mathbf{E}_{q_\phi(z|x)}[log (p_\theta(x|z)) + log \frac{p_\theta(z)}{q_\phi(z|x)}] $$
+$$= \mathbf{E}_{q_\phi(z|x)}[log (p_\theta(x|z)) + log \frac{p_\theta(z)}{q_\phi(z|x)}] $$
 
-$$ = \mathbf{E}_{q_\phi(z|x)}[log (p_\theta(x|z)) - log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
+$$= \mathbf{E}_{q_\phi(z|x)}[log (p_\theta(x|z)) - log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
 
-$$ = \mathbf{E}_{q_\phi(z|x)} [log (p_\theta(x|z))] - \mathbf{E}_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
+$$= \mathbf{E}_{q_\phi(z|x)} [log (p_\theta(x|z))] - \mathbf{E}_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
 
 -   The **first** term: $$\mathcal{L}_{E} = \mathbf{E}_{q_\phi(z|x)} log (p_\theta(x|z))$$ represents the **reconstruction loss**, which measures how well the decoder can reconstruct the input data.
   
