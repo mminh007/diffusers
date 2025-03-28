@@ -148,17 +148,17 @@ To **maximize** $\mathcal{L}_{(\theta, \phi)}(x)$, we:
 
 Thus, the **VAE loss function** can be rewritten as:
 
-$$\mathcal{L}_{(\theta, \phi)}(x) = \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] $$
+$$ L_{(\theta, \phi)}(x) = E_{q_\phi(z|x)} [log \frac{p_\theta(x,z)}{q_\phi(z|x)}] $$
 
-$$= \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x|z) p_\theta(z)}{q_\phi(z|x)}] $$
+$$= E_{q_\phi(z|x)} [log \frac{p_\theta(x|z) p_\theta(z)}{q_\phi(z|x)}] $$
 
-$$= \mathbf{E}_{q_\phi(z|x)}[log (p_\theta(x|z)) + log \frac{p_\theta(z)}{q_\phi(z|x)}] $$
+$$= E_{q_\phi(z|x)} [log (p_\theta(x|z)) + log \frac{p_\theta(z)}{q_\phi(z|x)}] $$
 
-$$= \mathbf{E}_{q_\phi(z|x)}[log (p_\theta(x|z)) - log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
+$$= E_{q_\phi(z|x)} [log (p_\theta(x|z)) - log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
 
-$$= \mathbf{E}_{q_\phi(z|x)} [log (p_\theta(x|z))] - \mathbf{E}_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
+$$= E_{q_\phi(z|x)} [log (p_\theta(x|z))] - E_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
 
--   The **first** term: $$\mathcal{L}_{E} = \mathbf{E}_{q_\phi(z|x)} log (p_\theta(x|z))$$ represents the **reconstruction loss**, which measures how well the decoder can reconstruct the input data.
+-   The **first** term: $$\mathcal{L}_{E} = E_{q_\phi(z|x)} log (p_\theta(x|z))$$ represents the **reconstruction loss**, which measures how well the decoder can reconstruct the input data.
   
 - The **second** term: $$ \mathcal{L}_{R} = \mathbf{E}_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}]$$ represents the **KL regularization term**, which ensures that the approximate posterior $q_{\phi}(z|x)$ does not deviate too much from the prior $p_{\theta}(z)$.
 
