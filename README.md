@@ -15,6 +15,7 @@ However, whereas most autoencoder architectures encode a discrete, fixed represe
 VAEs are a subset of the larger category of autoencoders, a neural network architecture typically used in deep learning for tasks such as data compression, image denoising, anomaly detection and facial recognition.
 
 :muscle: **Strongness:**
+
 :white_check_mark: **Probabilistic Framework** – Unlike traditional autoencoders, VAE learns a probabilistic distribution rather than a fixed mapping, improving robustness and diversity in generated samples.
 
 :white_check_mark: **Continuous and Structured Latent Space** – VAE enforces a smooth and continuous latent space, making it well-suited for generating coherent and meaningful samples.
@@ -24,6 +25,7 @@ VAEs are a subset of the larger category of autoencoders, a neural network archi
 :white_check_mark: **Uncertainty Estimation** – Since VAEs are probabilistic models, they provide uncertainty estimates, which are useful in applications like anomaly detection.
 
 :-1: **Weakeness:** 
+
 :white_check_mark: One of the biggest weaknesses is **the low reconstruction quality, as generated images often appear blurry**. This arises from the trade-off between the two main components in the loss function: **Reconstruction Loss** and **KL Divergence**. These two components often oppose each other, leading to a trade-off that results in reconstructions that are not as sharp as those produced by other models like GANs.
 
 :white_check_mark: **Limited Expressiveness of Latent Space** – The assumption that the latent variables follow a Gaussian distribution can sometimes restrict the model’s ability to capture complex structures in the data.
