@@ -136,7 +136,7 @@ The objective of the loss function in a Variational Autoencoder (VAE) is to:
 
 From $(**)$, the **Evidence Lower Bound (ELBO)** is given by:
 
-$$\mathcal{L}_{(\theta, \phi)}(x) := \mathbf{E}_{q_{\phi}(z|x)}[log \frac{p_{\theta}(x,z)}{q_{\phi}(z|x)}] $$  
+$$L_{(\theta, \phi)}(x) := E_{q_{\phi}(z|x)} [log \frac{p_{\theta}(x,z)}{q_{\phi}(z|x)}] $$  
 
 $$= log p_\theta(x) - D_{KL} (q_\phi(z|x) || p_\theta(z|x)) $$
 
@@ -158,16 +158,16 @@ $$= E_{q_\phi(z|x)} [log (p_\theta(x|z)) - log \frac{q_\phi(z|x)}{p_\theta(z)}] 
 
 $$= E_{q_\phi(z|x)} [log (p_\theta(x|z))] - E_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
 
--   The **first** term: $$\mathcal{L}_{E} = E_{q_\phi(z|x)} log (p_\theta(x|z))$$ represents the **reconstruction loss**, which measures how well the decoder can reconstruct the input data.
+-   The **first** term: $$L_E = E_{q_\phi(z|x)} log (p_\theta(x|z))$$ represents the **reconstruction loss**, which measures how well the decoder can reconstruct the input data.
   
-- The **second** term: $$ \mathcal{L}_{R} = \mathbf{E}_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}]$$ represents the **KL regularization term**, which ensures that the approximate posterior $q_{\phi}(z|x)$ does not deviate too much from the prior $p_{\theta}(z)$.
+- The **second** term: $$ L_R = E_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}]$$ represents the **KL regularization term**, which ensures that the approximate posterior $q_{\phi}(z|x)$ does not deviate too much from the prior $p_{\theta}(z)$.
 
 #### :key: Gradient Estimation:
 
 The $\nabla_\theta ELBO$ and $\nabla_\phi ELBO$ are computed using **Monte Carlo sampling**.
 -   The gradient with respect to $\theta$ can be estimated as: 
 
-$$ \nabla_\theta \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = \mathbf{E}_{q_\phi(z|x)} [\nabla_\theta log \frac{p_\theta(x,z)}{q_\phi(z|x)}] $$
+$$ \nabla_\theta E_{q_\phi(z|x)} [log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = E_{q_\phi(z|x)} [\nabla_\theta log \frac{p_\theta(x,z)}{q_\phi(z|x)}] $$
 which can be directly computed.
 
 - However $\nabla_\phi ELBO$ cannot be directly computed because $\phi$ appears inside the probability distribution $q_{\phi}(z|x)$.
@@ -200,22 +200,22 @@ $$ \Sigma_{\phi}(x)) = L_\phi(x) L_\phi(x)^T $$
 
 Using the reparameterization trick, the gradient can now be rewritten as:
 
-$$ \nabla_\phi \mathbf{E}_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = \mathbf{E}_\epsilon [\nabla_\phi log \frac{p_\theta(x, \mu_\phi(x)+L_\phi(x)\cdot \epsilon)}{q_\phi(\mu_\phi(x) + L_\phi(x)|x)}] $$
+$$ \nabla_\phi E_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = E_\epsilon [\nabla_\phi log \frac{p_\theta(x, \mu_\phi(x)+L_\phi(x)\cdot \epsilon)}{q_\phi(\mu_\phi(x) + L_\phi(x)|x)}] $$
 
 
 :rocket: **Summary:**
 
 :o: **The VAE loss function** consists of two terms:
 :one: **Reconstruction Loss** $\mathcal{L}_{E}$ ensures that the output is similar to the input. It which is measured using the **Mean Squared Error (MSE) Loss:** 
-    $$ \frac{1}{N} (x^{i}_{D} - x^{i}_{d_{\theta}(z)})^2 $$
+    $$ \frac{1}{N} ( x^i_D - x^i_{d_\theta(z)} )^2 $$
 
 where:
 - $x^{i}_{D}$  is the original input value.
-- $x^{i}_{d_{\theta}(z)}$  is the reconstructed output from the decoder.
+- $ x^{i}_{d_\theta(z)} $  is the reconstructed output from the decoder.
 - $N$ is the number of data samples.
 
-:two: **KL Regularization Loss** $\mathcal{L}_{R}$:
-$$ \mathbb{E}_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
+:two: **KL Regularization Loss** $L_R$:
+$$ E_{q_\phi(z|x)} [log \frac{q_\phi(z|x)}{p_\theta(z)}] $$
 
 is denoted as the **KL regularizer loss term**:
 -   The prior distribution $p_{\theta}(z)$ is sampled from a **standard normal distribution** $\mathcal{N}(0,I)$, so the KL loss term represents the divergence between two normal distributions:
@@ -228,4 +228,4 @@ $$ = - \frac{1}{2} \sum^{d}_{i=1} (1 + log(\sigma^2) - \mu^2 - \sigma^2) $$
 
 $$ D_{KL}(\mathcal(N)(\mu_{1}, \sigma^2_{1}) || \mathcal{N}(\mu_{2}, \sigma^2_{2})) $$
 
-$$ = \frac{1}{2} \sum^{d}_{i=1} (\frac{\sigma^2_{1}}{\sigma^2_{2}} + \frac{(\mu_{2} - \mu_{1})^2}{\sigma^2_{2}} - 1 + log (\frac{\sigma^2_{2}}{\sigma^2_{1}})) $$
+$$ = \frac{1}{2} \sum^{d}_{i=1} (\frac{\sigma^2_1}{\sigma^2_2} + \frac{(\mu_2 - \mu_1)^2}{\sigma^2_2} - 1 + log (\frac{\sigma^2_2}{\sigma^2_1})) $$
