@@ -5,9 +5,12 @@
 ```
 git pull https://github.com/mminh007/diffusers.git
 ```
+---
+
 ## :rocket: Variant-AutoEncoder:
 
 :link: <a href= "/VAE/README.md"> Explained of VAE  </a>
+
 Variational autoencoders (VAE) are deep learning models composed of an encoder that learns to isolate the important latent variables from training data and a decoder that then uses those latent variables to reconstruct the input data.
 
 However, whereas most autoencoder architectures encode a discrete, fixed representation of latent variables, VAEs encode a continuous, probabilistic representation of that latent space. This enables a VAE to not only accurately reconstruct the exact original input, but also use variational inference to generate new data samples that resemble the original input data.
@@ -39,3 +42,23 @@ python train_vae.py --save-dir="/outputs" --log-dir="/logs" --early-stop-patienc
 
 ```
 *Note: The script is configured for training based on the CIFAR-10 dataset.*
+
+---
+
+## :rocket: Diffusion
+
+:link: <a href= "#"> Explained of Diffusion Process  </a>
+
+In deep learning, **"diffusion"** refers to a class of generative models that learn to generate data by progressively adding noise to a dataset and then learning to reverse this process, effectively removing the noise and reconstructing the data or creating new, realistic versions.
+
+**Diffusion models** are a type of generative model, meaning they are trained to create new data samples that resemble the data they were trained on. Diffusion models operate in two main steps:
+
+:white_check_mark: **Forward Process (Noise Addition):** The process starts with real data and progressively adds noise to it, gradually transforming the data into pure noise. 
+-   The model gradually adds Gaussian noise to the input data (e.g., an image) over multiple steps.
+-   After many steps, the data becomes pure noise.
+-   This process is mathematically modeled as a **Markov Chain** using a stochastic differential equation.
+
+:white_check_mark: **Reverse Process (Denoising):** The model learns to reverse this process by training a neural network to convert noise back into data, effectively removing the noise step-by-step, reconstructing the original data from noise. 
+-   The model **learns to reverse the noise step-by-step** to reconstruct the original data.
+-   A neural network (usually a **U-Net architecture**) predicts how to remove the noise at each step.
+-   This reverse process generates high-quality images from pure noise.
