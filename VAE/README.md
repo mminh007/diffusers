@@ -113,7 +113,7 @@ $$= \mathbf{ELBO} (x; \theta, \phi)$$
 
 In the final step, we applied **Jensen’s inequality**. The condition for evaluating **ELBO** is that it must be an unbiased **Monte Carlo** estimate that can be computed as:
 
-$$\frac{1}{k} \sum^{k}_{i=1} \log p_{\theta}(x, z^i) q_{\phi}(z^i) \quad with \quad z^i \thicksim q_{\phi}(z|x) \quad (***) $$
+$$\frac{1}{k} \sum^{k}_{i=1} \log \frac{p_{\theta}(x, z^i)}{q_{\phi}(z^i)} \quad with \quad z^{i} \thicksim q_{\phi}(z|x) \quad (***) $$
 
 The choice of the variational distribution $q_{\phi}(z|x)$ is crucial. Equation $(***)$ holds for any parameterization of $\phi$, but the tightness of **ELBO** heavily depends on the specific choice of $q$. A good variational distribution should be flexible enough to closely approximate the true posterior $p(z|x)$ while also being simple enough to allow efficient sampling and density evaluation of $q_{\phi}(z)$.
 
@@ -214,7 +214,8 @@ $$ \nabla_\phi E_{q_\phi(z|x)}[log \frac{p_\theta(x,z)}{q_\phi(z|x)}] = E_\epsil
 :o: **The VAE loss function** consists of two terms:
 
 :one: **Reconstruction Loss** $L_E$ ensures that the output is similar to the input. It which is measured using the **Mean Squared Error (MSE) Loss:** 
-    $$\frac{1}{N} \sum_{i=1}^{N} \left( x_D^i - x^i_{d_\theta(z)} \right)^2 $$
+
+$$\frac{1}{N} \sum_{i=1}^{N} \left( x_D^i - x^i_{d_\theta(z)} \right)^2 $$
 
 where:
 - $x^{i}_{D}$  is the original input value.
