@@ -1,305 +1,15 @@
 import torch
 import torch.nn as nn
+from ultis import Encoder, EncoderV2, Decoder, DecoderV2, CNNBlock, DownBlock, MidBlock, UpBlock
 
-
-def get_act(act_type = "lrelu"):
-    """
-    Returns the activation function based on the given activation type.
-    
-    Args:
-        act_type (str): Type of activation function. Options are "relu", "lrelu", or "silu".
-                        Defaults to "lrelu".
-    
-    Returns:
-        nn.Module: The corresponding activation function.
-    """
-
-    if act_type == "relu":
-        return nn.ReLU()
-    
-    elif act_type == "lrelu":
-        return nn.LeakyReLU(0.2)
-
-    elif act_type == "silu":
-        return nn.SiLU()
-    
-    else:
-        return nn.LeakyReLU(0.2)
-    
-
-class CNNBlock(nn.Module):
-    """
-    A convolutional block with the following structure:
-    Conv2D -> BatchNorm -> Activation -> (Optional) Dropout.
-
-    Args:
-        in_chans (int): Number of input channels.
-        out_chans (int): Number of output channels.
-        activation (str): Type of activation function (e.g., "relu", "lrelu", "silu").
-        dropout (float or None): Dropout rate. If None, dropout is not applied.
-        **kwargs: Additional arguments for the convolutional layer.
-    """
-    
-    def __init__(self, in_chans, out_chans, activation="lrelu", dropout=0.3, **kwargs):
-        super().__init__()
-        self.conv = nn.Conv2d(in_chans, out_chans, **kwargs)
-        self.norm = nn.BatchNorm2d(num_features=out_chans)
-        self.act = get_act(act_type=activation)
-        self.dropout = nn.Dropout(dropout) if dropout is not None else None
-    
-    def forward(self, x):
-        """
-        Forward pass of CNNBlock.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch, in_chans, height, width).
-
-        Returns:
-            torch.Tensor: Output tensor of shape (batch, out_chans, height, width).
-        """
-        x = self.conv(x)
-        x = self.norm(x)
-
-        out = self.act(x)
-        if self.dropout is not None:
-            return self.dropout(out)
-        
-        return out
-
-
-class ResBlock(nn.Module):
-    """
-    Residual Block with expansion.
-
-    Args:
-        in_chans (int): Number of input channels.
-        out_chans (int): Number of output channels.
-        stride (int): Stride for convolution.
-        padding (int): Padding for convolution.
-        downsample (nn.Module or None): Downsampling layer for the skip connection.
-        dropout (float): Dropout rate.
-    """
-
-    expansion = 4
-    def __init__(self, in_chans, out_chans, stride=1, padding=1, downsample=None, dropout=0.3):
-        super().__init__()
-        self.conv1 = CNNBlock(in_chans, out_chans, kernel_size=1, stride=1, padding=0, activation="lrelu", dropout=0.3)
-        self.conv2 = CNNBlock(out_chans, out_chans,  kernel_size=3, stride=stride, padding=padding, activation="lrelu", dropout=0.3)
-        self.conv3 = nn.Conv2d(out_chans, out_chans*self.expansion, kernel_size=1, stride=1, padding=0)
-        self.norm3 = nn.BatchNorm2d(num_features=out_chans*self.expansion)
-        self.act3 = nn.LeakyReLU()
-        self.dropout = nn.Dropout(dropout) if dropout is not None else None
-
-        self.i_downsample = downsample
-
-    def forward(self, x):
-        """
-        Forward pass of ResBlock.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Output tensor.
-        """
-
-        identity = x.clone()
-
-        if self.i_downsample is not None:
-            identity = self.i_downsample(identity)
-
-        x = self.conv1(x)
-        x = self.conv2(x)
-        
-        x = self.conv3(x)
-        x = self.norm3(x)
-        x = x + identity
-        out = self.act3(x)
-
-        if self.dropout is not None:
-            return self.dropout(out)
-        
-        return out
-    
-
-class Encoder(nn.Module):
-    """
-    """
-
-    def __init__(self, in_chans, latent_dim=128):
-        super().__init__()
-        self.dim = 32
-        self.conv1 = CNNBlock(in_chans, 32, kernel_size=3, activation='lrelu', stride=2, padding=1)
-        self.layer = self._make_layer(ResBlock, planes=32, stride=2)
-
-        self.flatten_dim = 128*8*8
-        self.fc_mu = nn.Linear(self.flatten_dim, latent_dim)
-        self.fc_logvar = nn.Linear(self.flatten_dim, latent_dim)
-
-
-    def _make_layer(self, ResBlock, planes, stride=1):
-        ii_downsample = None
-
-        if stride != 1 or self.dim != planes * ResBlock.expansion:
-            ii_downsample = nn.Sequential(
-                nn.Conv2d(self.dim, planes*ResBlock.expansion, kernel_size=1, stride=stride, padding=0),
-                nn.BatchNorm2d(num_features=planes*ResBlock.expansion)
-            )
-
-        return ResBlock(self.dim, planes, downsample=ii_downsample, stride=stride)
-    
-
-    def forward(self, x):
-        
-        x = self.conv1(x)
-        x = self.layer(x)
-
-        x = x.view(-1, self.flatten_dim) # (-1, 128*8*8)
-        mu = self.fc_mu(x) # (-1, 128)
-        logvar = self.fc_logvar(x) # (-1, 128)
-
-        return mu, logvar
-    
-
-class EncoderV2(nn.Module):
-    """
-    Encoder module for feature extraction.
-    
-    Args:
-        num_chans (int): Number of input channels.
-        in_chans (int): Number of initial convolution channels.
-        z_dim (int): Dimension of the latent space.
-        channel_multipliers (list): Multiplicative factors for the number of channels.
-        blocks (int): Number of residual blocks per layer.
-    """
-
-    def __init__(self, num_chans, in_chans=64, z_dim=4, channel_multipliers=[1,2,4,4], blocks=2):
-        super().__init__()
-        self.dim = in_chans   
-        self.conv1 = CNNBlock(num_chans, in_chans, kernel_size=3, activation='lrelu', stride=1, padding=1)
-
-
-        self.layer = nn.ModuleList()
-        for factor in channel_multipliers:
-            self.layer.append(self._make_layer(ResBlock, planes= factor * in_chans, stride=2, block=blocks))
-
-        self.conv2 = nn.Conv2d(self.dim, z_dim * 2, kernel_size=1, stride=1, padding=0)
-
-    def _make_layer(self, ResBlock, planes, block, stride=1):
-        ii_downsample = None
-        layers = []
-
-        if stride != 1 or self.dim != planes * ResBlock.expansion:
-            ii_downsample = nn.Sequential(
-                nn.Conv2d(self.dim, planes*ResBlock.expansion, kernel_size=1, stride=stride, padding=0),
-                nn.BatchNorm2d(num_features=planes*ResBlock.expansion)
-            )
-        layers.append(ResBlock(self.dim, planes, downsample=ii_downsample, stride=stride))
-        self.dim = planes * ResBlock.expansion
-
-        for i in range(block - 1):
-          layers.append(ResBlock(self.dim, planes))
-
-        return nn.Sequential(*layers)
-    
-    def forward(self, x):
-        x = self.conv1(x)
-        for layer in self.layer:
-            x = layer(x)
-
-        output = self.conv2(x)
-        return output
-    
-class Decoder(nn.Module):
-    """
-    """
-    def __init__(self, latent_dim=128, out_chans=3):
-        super().__init__()
-        self.fc_decode = nn.Linear(latent_dim, 128*8*8)
-        self.conv1 = CNNBlock(latent_dim, latent_dim // 2, kernel_size=3, stride=1, padding=1, activation="lrelu")
-        self.conv2 = CNNBlock(latent_dim // 2, latent_dim, kernel_size=3, stride=1, padding=1, activation="lrelu")
-
-        self.deconv1 = nn.ConvTranspose2d(latent_dim, out_chans, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.deconv2 = nn.ConvTranspose2d(out_chans, out_chans, kernel_size=3, stride=2, padding=1, output_padding=1)
-
-        self.sigmoid = nn.Sigmoid()
-
-
-    def forward(self, x):
-        x = self.fc_decode(x).view(-1, 128, 8, 8)
-
-        indentity = x.clone()
-
-        x = self.conv1(x)
-        x = self.conv2(x)
-
-        x = x + indentity
-
-        x = self.deconv1(x)
-        x = self.deconv2(x)
-        out = self.sigmoid(x)
-
-        return out
-    
-
-    def forward(self, x):       
-        x = self.conv1(x)
-        for layer in self.layer:
-            x = layer(x)
-
-        output = self.conv2(x)
-        return output
-    
-class DecoderV2(nn.Module):
-    """
-    """
-    def __init__(self, in_chans=64, embed_dim=4, channel_multipliers=[1,2,4,4], blocks=2, out_channels=3):
-        super().__init__()
-        self.dim = in_chans
-        self.conv1 = CNNBlock(embed_dim, in_chans, kernel_size=1, activation='lrelu')  # (4, H, W) -> (265, H, W)
-
-        self.layers = nn.ModuleList()
-        for factor in reversed(channel_multipliers):
-            self.layers.append(self._make_layer(ResBlock, planes= in_chans, block=blocks)) # 256 > 
-
-        self.conv2 = CNNBlock(self.dim, out_channels, kernel_size=3, activation='lrelu', stride=1, padding=1)
-        
-
-    def _make_layer(self, ResBlock, planes, block, stride=1):
-        layers = []
-        ii_upsample = None
-        if self.dim != planes * ResBlock.expansion:
-            ii_upsample = nn.Sequential(
-                nn.Conv2d(self.dim, planes*ResBlock.expansion, kernel_size=1, stride=stride, padding=0),
-                nn.BatchNorm2d(num_features=planes*ResBlock.expansion))
-            
-        layers.append(ResBlock(self.dim, planes, stride=stride, padding=1, downsample=ii_upsample))
-        self.dim = planes * ResBlock.expansion
-          
-        for i in range(block - 1):
-          layers.append(ResBlock(self.dim, planes, stride=1, padding=1))
-              
-        layers.append(nn.Conv2d(self.dim, self.dim * 4, kernel_size=3, padding=1))
-        layers.append(nn.PixelShuffle(2))
-              
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        x = self.conv1(x)
-
-        for layer in self.layers:
-            x = layer(x)
-
-        out = self.conv2(x)
-        return out
 
 class ResNetVAE(nn.Module):
     """
     """
-    def __init__(self, in_chans, out_chans, latent_dim):
+    def __init__(self, in_chans, out_chans, latent_dim, activation="swish"):
         super().__init__()
-        self.encode = Encoder(in_chans, latent_dim)
-        self.decode = Decoder(latent_dim, out_chans)
+        self.encode = Encoder(in_chans, latent_dim, activation)
+        self.decode = Decoder(latent_dim, out_chans, activation)
 
 
     def _reparameterize(self, mu, logvar):
@@ -332,11 +42,12 @@ class ResNetVAEV2(nn.Module):
                  out_chans=3,
                  z_dim=4,
                  embed_dim=4,
+                 activation="swish",
                  blocks=2,
                  channel_multipliers=[1,2,4,4]):
         super().__init__()
-        self.encode = EncoderV2(num_chans, in_chans, z_dim, channel_multipliers, blocks)
-        self.decode = DecoderV2(in_chans, embed_dim, channel_multipliers, blocks, out_chans)
+        self.encode = EncoderV2(num_chans, in_chans, z_dim, activation, channel_multipliers, blocks)
+        self.decode = DecoderV2(in_chans, embed_dim, activation, channel_multipliers, blocks, out_chans)
 
         self.quant_conv = nn.Conv2d(z_dim * 2, embed_dim * 2, kernel_size=1, stride=1, padding=0)
 
@@ -364,3 +75,109 @@ class ResNetVAEV2(nn.Module):
         img = self.decode(z)
 
         return img, mu, logvar
+
+
+class Unet(nn.Module):
+    """
+    U-Net architecture with attention, time conditioning, and residual connections.
+
+    Args:
+        in_chans (int): Number of input channels.
+        out_chans (int): Number of output channels.
+        hidden_dim (int): Base number of channels for the U-Net.
+        time_dim (int): Dimension of the positional/time embedding.
+        activation (str): Activation function to use in CNN blocks.
+        dropout (float): Dropout rate in CNN blocks.
+        n_heads (int): Number of heads in multi-head attention.
+        qkv_bias (bool): Whether to add bias to QKV linear layers.
+        qk_scale (float): Optional scale for QK attention.
+        is_attn (List[bool]): List of booleans indicating attention at each down/up level.
+        down_scale (int): Number of downsampling (and upsampling) steps.
+        residual (bool): Whether to include residual connections.
+
+    Inputs:
+        x (Tensor): Input image tensor of shape (B, in_chans, H, W)
+        t (Tensor): Time tensor of shape (B,), used for time-based conditioning
+
+    Outputs:
+        output (Tensor): Output image tensor of shape (B, out_chans, H, W)
+    """
+    def __init__(self,
+                 in_chans=3,
+                 out_chans=3,
+                 hidden_dim=64,
+                 time_dim=256,
+                 activation="swish",
+                 dropout=0.3,
+                 n_heads=1,
+                 qkv_bias=True,
+                 qk_scale=None,
+                 is_attn=[True, True, True, True],
+                 down_scale=3,
+                 residual=True):
+        super().__init__()
+        
+        self.dim = hidden_dim
+        self.time_dim = time_dim
+        self.conv1 = CNNBlock(in_chans, hidden_dim, activation=activation, kernel_size=3, padding=1, stride=1)
+
+        self.downscales = nn.ModuleList()
+        
+        for i in range(down_scale):
+            self.downscales.append(DownBlock(in_chans=self.dim, out_chans=self.dim * 2, time_dim=time_dim,
+                                             n_heads=n_heads, activation=activation, qk_scale=qk_scale,
+                                             qkv_bias=qkv_bias, has_attn=is_attn[i], dropout=dropout, residual=True))
+            self.dim = self.dim * 2
+
+        self.middle_1 = MidBlock(in_chans=self.dim, out_chans=self.dim * 2, time_dim=256,
+                               activation="swish", dropout=dropout, n_heads=n_heads, qk_scale=qkv_bias,
+                               qkv_bias=qkv_bias, has_attn=is_attn[-1], residual=residual)  
+        
+        self.middle_2 = UpBlock(in_chans=self.dim * 2, out_chans= self.dim, time_dim=256,
+                                        n_heads=n_heads, activation=activation, qk_scale=qk_scale,
+                                        qkv_bias=qkv_bias, has_attn=is_attn[-1], dropout=dropout, residual=True)
+        self.dim = self.dim // 2
+        
+        self.upscale = nn.ModuleList()
+
+        for i in reversed(range(down_scale)):
+            self.upscale.append(UpBlock(in_chans=self.dim * 2, out_chans= self.dim, time_dim=256,
+                                        n_heads=n_heads, activation=activation, qk_scale=qk_scale,
+                                        qkv_bias=qkv_bias, has_attn=is_attn[i], dropout=dropout, residual=True))
+            self.dim = self.dim // 2
+        
+
+        self.final = nn.Conv2d(self.dim, out_chans, kernel_size=1)
+
+    def _pos_encoding(self, t, channels):
+        inv_freq = 1.0 / (
+            10000
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+        )
+        pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        return pos_enc
+
+    
+    def forward(self, x, t):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self._pos_encoding(t, self.time_dim)
+
+        x = self.conv1(x)
+
+        h = [x]
+
+        for layer in self.downscales:
+            x = layer(x, t)
+            h.append(x)
+        
+        x = self.middle_1(x, t)
+
+        x = self.middle_2(x, h.pop(), t)
+
+        for layer in self.upscale:
+            x = layer(x, h.pop(), t)
+        output = self.final(x)
+
+        return output
