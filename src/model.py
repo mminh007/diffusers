@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from ultis import Encoder, EncoderV2, Decoder, DecoderV2, CNNBlock, DownBlock, MidBlock, UpBlock
+from src.ultis import Encoder, EncoderV2, Decoder, DecoderV2, CNNBlock, DownBlock, MidBlock, UpBlock
 
 
 class ResNetVAE(nn.Module):
@@ -10,7 +10,6 @@ class ResNetVAE(nn.Module):
         super().__init__()
         self.encode = Encoder(in_chans, latent_dim, activation)
         self.decode = Decoder(latent_dim, out_chans, activation)
-
 
     def _reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -25,7 +24,7 @@ class ResNetVAE(nn.Module):
 
         return self.decode(z), mu, logvar
     
-
+    
 class ResNetVAEV2(nn.Module):
     """
     Args:
@@ -37,8 +36,9 @@ class ResNetVAEV2(nn.Module):
         blocks (int): Number of residual blocks per layer.       
     """
 
-    def __init__(self, in_chans=64,
-                 num_chans=3,
+    def __init__(self,
+                 in_chans=3,
+                 num_chans=64,
                  out_chans=3,
                  z_dim=4,
                  embed_dim=4,
@@ -46,8 +46,8 @@ class ResNetVAEV2(nn.Module):
                  blocks=2,
                  channel_multipliers=[1,2,4,4]):
         super().__init__()
-        self.encode = EncoderV2(num_chans, in_chans, z_dim, activation, channel_multipliers, blocks)
-        self.decode = DecoderV2(in_chans, embed_dim, activation, channel_multipliers, blocks, out_chans)
+        self.encode = EncoderV2(in_chans, num_chans, z_dim, activation, channel_multipliers, blocks)
+        self.decode = DecoderV2(num_chans, embed_dim, activation, channel_multipliers, blocks, out_chans)
 
         self.quant_conv = nn.Conv2d(z_dim * 2, embed_dim * 2, kernel_size=1, stride=1, padding=0)
 
@@ -77,7 +77,7 @@ class ResNetVAEV2(nn.Module):
         return img, mu, logvar
 
 
-class Unet(nn.Module):
+class UnetAttn(nn.Module):
     """
     U-Net architecture with attention, time conditioning, and residual connections.
 
@@ -114,9 +114,10 @@ class Unet(nn.Module):
                  qk_scale=None,
                  is_attn=[True, True, True, True],
                  down_scale=3,
-                 residual=True):
+                 residual=True,
+                 device="cuda"):
         super().__init__()
-        
+        self.device = device
         self.dim = hidden_dim
         self.time_dim = time_dim
         self.conv1 = CNNBlock(in_chans, hidden_dim, activation=activation, kernel_size=3, padding=1, stride=1)
@@ -147,7 +148,7 @@ class Unet(nn.Module):
             self.dim = self.dim // 2
         
 
-        self.final = nn.Conv2d(self.dim, out_chans, kernel_size=1)
+        self.final = nn.Conv2d(self.dim * 2, out_chans, kernel_size=1)
 
     def _pos_encoding(self, t, channels):
         inv_freq = 1.0 / (
