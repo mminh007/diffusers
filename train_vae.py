@@ -8,13 +8,14 @@ from tqdm import tqdm
 import os
 from datetime import datetime
 import numpy as np
+import logging
 
 
 def setup_parse():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--in-chans", default=64, type=int)
-    parser.add_argument("--num-chans", default=3, type=int)
+    parser.add_argument("--in-chans", default=3, type=int)
+    parser.add_argument("--num-chans", default=64, type=int)
     parser.add_argument("--out-chans", default=3, type=int)
     parser.add_argument("--z-dim", default=4, type=int)
     parser.add_argument("--embed-dim", default=4, type=int)
@@ -50,19 +51,42 @@ def setup_parse():
     return args
 
 
+def setup_logger(log_dir):
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_file = os.path.join(log_dir, f"train_log_{timestamp}.log")
+
+    logger = logging.getLogger("VAE_Training")
+    logger.setLevel(logging.INFO)
+
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    fh = logging.FileHandler(log_file)
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(formatter)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+
+    if logger.hasHandlers():
+        logger.handlers.clear()
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    return logger, log_file
+
+
 def main():
 
     args = setup_parse()
 
-    os.makedirs(args.log_dir, exist_ok=True)
+    logger, log_file = setup_logger(args.log_dir)
 
-    timestap = datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_file = os.path.join(args.log_dir, f"train_log_{timestap}.txt")
-    
-    with open(log_file, "w") as f:
-        f.write(f"Training started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Batch size: {args.batch}, Image size: {args.imgsz}x{args.imgsz}\n")
-        f.write(f"Total number of epochs: {args.epochs}\n")
+    logger.info("****** Training started ******")
+    logger.info(f" Batch size: {args.batch}")
+    logger.info(f" Image size: {args.imgsz}x{args.imgsz}")
+    logger.info(f" Total number of epochs: {args.epochs}")
 
     trainloader, testloader = build_dataloader(args)
 
@@ -156,13 +180,6 @@ def main():
             train_recon_loss_history.append(avg_train_recons_loss)
             train_kl_loss_history.append(avg_train_kl_loss)
 
-        print(f"Epoch {epoch+1}/{args.epochs}:\n Train_Loss: {avg_train_loss}, "
-                f"Reconstruction Loss: {avg_train_recons_loss}, KL Divergence: {avg_train_kl_loss}\n")
-        
-        with open(log_file, "a") as f:
-            f.write(f"Epoch {epoch+1}:\n"
-                    f"  Train_loss: {avg_train_loss:.6f}, Train_Reconstruction_loss: {recons_loss.item():.6f}, Train_KL_loss: {kl_loss.item():.6f}\n")
-
         model.eval()
         val_loss = 0.0
         val_recons = 0.0
@@ -187,10 +204,9 @@ def main():
             val_recon_loss_history.append(avg_recons)
             val_kl_loss_history.append(avg_kl)
 
-        print(f"=== Val_loss: {avg_val:.6f}, Val Reconstruction Loss: {avg_recons:.6f}, Val KL Divergence: {avg_kl:.6f}\n")
-
-        with open(log_file, "a") as f:
-            f.write(f"  Val_loss: {avg_val:.6f}, Val_Reconstruction_loss: {avg_recons:.6f}, Val_KL_loss: {avg_kl:.6f}\n")
+        logger.info(f"Epoch {epoch+1}:\n"
+                    f"  Train_loss: {avg_train_loss:.6f}, Train_Reconstruction_loss: {recons_loss.item():.6f}, Train_KL_loss: {kl_loss.item():.6f}\n"
+                    f"  Val_loss: {avg_val:.6f}, Val_Reconstruction_loss: {avg_recons:.6f}, Val_KL_loss: {avg_kl:.6f}\n")
         
         if scheduler is not None:
             if args.scheduler == "plateau":
@@ -203,22 +219,23 @@ def main():
         
         if avg_val < best_loss:
             best_loss = avg_val
-            torch.save(model.state_dict(), ckpt_dir)           
-            print(f"Best model saved at epoch {epoch+1}")
+            torch.save(model.state_dict(), ckpt_dir)
+
+            logger.info(f"****** Best model saved at epoch {epoch+1} ******")        
             patience_counter = 0
         else:
             patience_counter += 1
+            logger.info(f"Early stopping patience: {patience_counter}/{args.early_stop_patience}")
             print(f"Early stopping patience: {patience_counter}/{args.early_stop_patience}")
 
         if patience_counter >= args.early_stop_patience:
             with open(log_file, "a") as f:
-                f.write(f"\n{'*' * 90}\n"
+                logger.info(f"\n{'*' * 90}\n"
                         f"{' ' * 15} Early stopping triggered. Training stopped at epoch {epoch - args.early_stop_patience}.\n")
             print("Early stopping triggered. Training stopped.")
             break
     
-    with open(log_file, "a") as f:
-        f.write(f"\nTraining finished at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    logger.info(f"\nTraining finished at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     if args.visualize:
         losses_dict = {

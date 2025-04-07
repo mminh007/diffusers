@@ -96,7 +96,7 @@ class ResBlock(nn.Module):
         self.conv2 = CNNBlock(out_chans, out_chans,  kernel_size=3, stride=stride, padding=padding, activation=activation, dropout=0.3)
         self.conv3 = nn.Conv2d(out_chans, out_chans*self.expansion, kernel_size=1, stride=1, padding=0)
         self.norm3 = nn.BatchNorm2d(num_features=out_chans*self.expansion)
-        self.act3 = get_act(get_act=activation)
+        self.act3 = get_act(act_type=activation)
         self.dropout = nn.Dropout(dropout) if dropout is not None else None
 
         self.i_downsample = downsample
@@ -182,15 +182,15 @@ class EncoderV2(nn.Module):
         blocks (int): Number of residual blocks per layer.
     """
 
-    def __init__(self, num_chans, in_chans=64, z_dim=4, activation="swish", channel_multipliers=[1,2,4,4], blocks=2):
+    def __init__(self, in_chans=3, num_chans=64, z_dim=4, activation="swish", channel_multipliers=[1,2,4,4], blocks=2):
         super().__init__()
-        self.dim = in_chans   
-        self.conv1 = CNNBlock(num_chans, in_chans, kernel_size=3, activation=activation, stride=1, padding=1)
+        self.dim = num_chans   
+        self.conv1 = CNNBlock(in_chans, num_chans, kernel_size=3, activation=activation, stride=1, padding=1)
 
 
         self.layer = nn.ModuleList()
         for factor in channel_multipliers:
-            self.layer.append(self._make_layer(ResBlock, planes= factor * in_chans, stride=2, block=blocks))
+            self.layer.append(self._make_layer(ResBlock, planes= factor * num_chans, stride=2, block=blocks))
 
         self.conv2 = nn.Conv2d(self.dim, z_dim * 2, kernel_size=1, stride=1, padding=0)
 
@@ -264,14 +264,14 @@ class Decoder(nn.Module):
 class DecoderV2(nn.Module):
     """
     """
-    def __init__(self, in_chans=64, embed_dim=4, activation="swish", channel_multipliers=[1,2,4,4], blocks=2, out_channels=3):
+    def __init__(self, num_chans=64, embed_dim=4, activation="swish", channel_multipliers=[1,2,4,4], blocks=2, out_channels=3):
         super().__init__()
-        self.dim = in_chans
-        self.conv1 = CNNBlock(embed_dim, in_chans, kernel_size=1, activation=activation)  # (4, H, W) -> (265, H, W)
+        self.dim = num_chans
+        self.conv1 = CNNBlock(embed_dim, num_chans, kernel_size=1, activation=activation)  # (4, H, W) -> (265, H, W)
 
         self.layers = nn.ModuleList()
         for factor in reversed(channel_multipliers):
-            self.layers.append(self._make_layer(ResBlock, planes= factor * in_chans, block=blocks)) # 256 > 
+            self.layers.append(self._make_layer(ResBlock, planes= factor * num_chans, block=blocks)) # 256 > 
 
         self.conv2 = CNNBlock(self.dim, out_channels, kernel_size=3, activation=activation, stride=1, padding=1)
         
@@ -344,9 +344,9 @@ class AttnBlock(nn.Module):
 
         attn = qk_dot_product.softmax(dim=-1)
 
-        x = (attn @ v).view(B, self.n_heads, H, W, -1).permute(0, 1, 4, 2, 3).reshape(B, C, H, W)
+        x = (attn @ v)
 
-        x = self.proj(x)
+        x = self.proj(x).view(B, self.n_heads, H, W, -1).permute(0, 1, 4, 2, 3).reshape(B, C, H, W)
 
         return x
 
@@ -367,7 +367,8 @@ class Down(nn.Module):
         Input: (B, C, H, W), (B, time_dim)
         Output: (B, out_chans, H/2, W/2)
     """
-    def __init__(self, in_chans=64,
+    def __init__(self,
+                 in_chans,
                  out_chans=64,
                  time_dim=256,
                  activation="swish",
@@ -493,11 +494,10 @@ class MidBlock(nn.Module):
         self.down = Down(in_chans, out_chans, time_dim, activation, dropout, residual)
 
         if has_attn:
-            self.attn = AttnBlock(in_chans, n_heads, qkv_bias, qk_scale)
+            self.attn = AttnBlock(out_chans, n_heads, qkv_bias, qk_scale)
         else:
             self.attn = nn.Identity()
-        
-    
+         
     def forward(self, x: torch.Tensor, t: torch.Tensor):
         x = self.down(x, t)
         x = self.attn(x)
@@ -544,7 +544,7 @@ class Up(nn.Module):
         )
 
         if residual:
-            self.shortcut = nn.Conv2d(out_chans, out_chans, kernel_size=1, padding=1)
+            self.shortcut = nn.Conv2d(out_chans, out_chans, kernel_size=1)
         else:
             self.shortcut = nn.Identity()
     
