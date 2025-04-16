@@ -127,7 +127,8 @@ def main(args):
             if patience_counter >= args.early_stop_patience:
                 logger.info("Early stopping triggered.")
                 break
-    
+        logger.info("*" * 77)
+
     logger.info(f"\nTraining finished at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
 

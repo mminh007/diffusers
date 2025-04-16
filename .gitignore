@@ -4,9 +4,12 @@ __pycache__/
 *$py.class
 
 output/
+*.zip
 # C extensions
 *.so
 
+*.jpg
+*.pt
 # Distribution / packaging
 .Python
 build/
