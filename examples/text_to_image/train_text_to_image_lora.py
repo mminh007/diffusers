@@ -87,9 +87,9 @@ def main():
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
 
-    unet.requires_grad__(False)
-    vae.requires_grad__(False)
-    text_encoder.requires_grad__(False)
+    unet.requires_grad_(False)
+    vae.requires_grad_(False)
+    text_encoder.requires_grad_(False)
 
     # For mixed precision training we cast all non-trainable weights (vae, non-lora text_encoder and non-lora unet) to half-precision
     # as these weights are only used for inference, keeping weights in full precision is not required.
@@ -109,23 +109,21 @@ def main():
     vae.to(accelerator.device, dtype=weight_dtype)
     text_encoder.to(accelerator.device, dtype=weight_dtype)
 
-    unet.add_adapter("lora", config=unet_lora_config)
+    unet.add_adapter(unet_lora_config)
     if args.mixed_precision == "fp16":
         cast_training_params(unet, weight_dtype=torch.float32)
+
+    print(f"✅ xformers= {is_xformers_available()}")
 
     if args.enable_xformers_memory_efficient_attention and is_xformers_available():
         try:
             import xformers
         except ImportError:
             raise ImportError(
-                "xformers is not installed. Please install it with `pip install xformers`."
+                "❌ xformers is not installed. Please install it with `pip install xformers`."
             )   
         unet.enable_xformers_memory_efficient_attention()
 
-    else:
-        raise ValueError(
-            "xformers is not installed. Please install it with `pip install xformers`."
-        )
 
     lora_layers = filter(lambda p: p.requires_grad, unet.parameters())
     if args.gradient_checkpointing:
@@ -142,17 +140,17 @@ def main():
             import bitsandbytes as bnb
         except ImportError:
             raise ImportError(
-                "Please install `bitsandbytes` to use 8-bit Adam. "
-                "You can do so with `pip install bitsandbytes`."
+                "⚙️ Please install `bitsandbytes` to use 8-bit Adam. "
+                "🏃 You can do so with `pip install bitsandbytes`."
             )
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
-    
+
     optimizer = optimizer_cls(
         lora_layers,
         lr=args.learning_rate,
-        betas=(args.beta1, args.beta2),
+        betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
@@ -187,7 +185,7 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         if num_training_steps_for_scheduler != args.max_train_steps * accelerator.num_processes:
             logger.warning(
-                f"num_train_steps_for_scheduler is {num_training_steps_for_scheduler}, but max_train_steps is {args.max_train_steps}. "
+                f"⚠️ num_train_steps_for_scheduler is {num_training_steps_for_scheduler}, but max_train_steps is {args.max_train_steps}. "
                 "The training will be stopped after the number of training steps."
             )
     
@@ -259,7 +257,7 @@ def main():
                     # Add noise to the latents according to the noise magnitude at each timestep
                     # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                encoder_hidden_states = text_encoder(batch["input_ids"], return_dict=False)[0]
+                encoder_hidden_states = text_encoder(batch["input_ids"].to(accelerator.device), return_dict=False)[0]
 
                 if args.prediction_type is not None:
                     noise_scheduler.register_to_config(prediction_type=args.prediction_type)
@@ -269,7 +267,7 @@ def main():
                 elif noise_scheduler.config.prediction_type == "v_prediction":
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 else:
-                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}.")
+                    raise ValueError(f"❌ Unknown prediction type {noise_scheduler.config.prediction_type}.")
                     
                 model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
 
@@ -380,7 +378,8 @@ def main():
         # Save the model every epoch
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
-            unet = unet.to(accelerator.device, dtype=weight_dtype)
+            unet = unet.to(torch.float32)
+
             unwrapped_unet = unwrap_model(unet, accelerator)
             unet_lora_state_dict = convert_state_dict_to_diffusers(
                 get_peft_model_state_dict(unwrapped_unet)
@@ -399,7 +398,8 @@ def main():
                     variant=args.variant,
                     torch_dtype=weight_dtype,
                 )
-
+                
+                pipeline = pipeline.to(accelerator.device)
                 pipeline.load_lora_weights(args.output_dir)
 
                 images = log_validation(

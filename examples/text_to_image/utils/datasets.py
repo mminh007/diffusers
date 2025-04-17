@@ -9,12 +9,12 @@ def build_dataset(tokenizer, accelerator, args):
     
     if args.dataset_name is not None:
         dataset = load_dataset(args.dataset_name, args.dataset_config_name,
-                               cache_dir=args.cache_dir, split=args.split)
+                               cache_dir=args.cache_dir, split="train")
         
     else:
         data_files = {}
         if args.train_data_dir is not None:
-            data_files["train"] = args.train_data_dir
+            data_files = args.train_data_dir
         dataset = load_dataset(
             "imagefolder",
             data_files=data_files,
@@ -81,8 +81,8 @@ def build_dataset(tokenizer, accelerator, args):
 
     if accelerator.is_local_main_process:
         if args.max_train_samples is not None:
-            dataset['train'] = dataset['train'].shuffle(seed=args.seed).select(range(args.max_train_samples))
-        train_dataset = dataset['train'].with_transform(preprocess_train)
+            dataset = dataset.shuffle(seed=args.seed).select(range(args.max_train_samples))
+        train_dataset = dataset.with_transform(preprocess_train)
         #train_dataset.set_format(type="torch", columns=["pixel_values", "input_ids"])
 
 
